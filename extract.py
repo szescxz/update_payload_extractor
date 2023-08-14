@@ -20,7 +20,7 @@ def list_content(payload_file_name):
                                          part.new_partition_info.size))
 
 
-def extract(payload_file_name, output_dir="output", old_dir="old", partition_names=None, skip_hash=None):
+def extract(payload_file_name, output_dir="output", old_dir="old", partition_names=None, skip_hash=None, ignore_block_size=None):
     try:
         os.makedirs(output_dir)
     except OSError as e:
@@ -34,7 +34,7 @@ def extract(payload_file_name, output_dir="output", old_dir="old", partition_nam
         payload = update_payload.Payload(payload_file)
         payload.Init()
 
-        helper = applier.PayloadApplier(payload)
+        helper = applier.PayloadApplier(payload, ignore_block_size)
         for part in payload.manifest.partitions:
             if partition_names and part.partition_name not in partition_names:
                 continue
@@ -74,9 +74,11 @@ if __name__ == '__main__':
                         help="List the partitions included in the payload.bin")
     parser.add_argument("--skip_hash", action="store_true",
                         help="Skip the hash check for individual img files")
+    parser.add_argument("--ignore_block_size", action="store_true",
+                        help="Ignore block size")
 
     args = parser.parse_args()
     if args.list_partitions:
         list_content(args.payload)
     else:
-        extract(args.payload, args.output_dir, args.old_dir, args.partitions, args.skip_hash)
+        extract(args.payload, args.output_dir, args.old_dir, args.partitions, args.skip_hash, args.ignore_block_size)

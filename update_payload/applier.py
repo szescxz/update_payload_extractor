@@ -206,7 +206,7 @@ class PayloadApplier(object):
   applying an update payload.
   """
 
-  def __init__(self, payload, bsdiff_in_place=True, bspatch_path="./bspatch",
+  def __init__(self, payload, ignore_block_size, bsdiff_in_place=True, bspatch_path="./bspatch",
                puffpatch_path="./puffin", truncate_to_expected_size=True):
     """Initialize the applier.
 
@@ -221,6 +221,7 @@ class PayloadApplier(object):
     """
     assert payload.is_init, 'uninitialized update payload'
     self.payload = payload
+    self.ignore_block_size = ignore_block_size
     self.block_size = payload.manifest.block_size
     self.minor_version = payload.manifest.minor_version
     self.bsdiff_in_place = bsdiff_in_place
@@ -271,7 +272,7 @@ class PayloadApplier(object):
              part_size))
 
       # Make sure that we have enough data to write.
-      if data_end >= data_length + block_size:
+      if not self.ignore_block_size and (data_end >= data_length + block_size):
         raise PayloadError(
             '%s: more dst blocks than data (even with padding)')
 

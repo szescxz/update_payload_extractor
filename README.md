@@ -16,5 +16,5 @@ pip3 install -r requirements.txt
 
 - Copy original images (from full OTA or dumped from devices) to old_dir folder
 ```
-./extract.py [--skip_hash] [--output dir <output-dir-name>] --old_dir <old-dir-name> payload.bin
+./extract.py [--skip_hash] [--ignore_block_size] [--output dir <output-dir-name>] [--old_dir <old-dir-name>] payload.bin
 ```
