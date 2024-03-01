@@ -4,11 +4,19 @@ import argparse
 import errno
 import glob
 import os
+import platform
 
 import update_payload
 from update_payload import applier
 
-os.environ['LD_LIBRARY_PATH'] = './lib64/'
+if platform.machine == 'x86_64':
+  os.environ['LD_LIBRARY_PATH'] = './lib64/'
+if platform.machine == 'x86':
+  os.environ['LD_LIBRARY_PATH'] = './lib/'
+elif platform.machine == 'aarch64':
+  os.environ['LD_LIBRARY_PATH'] = '/system/lib64:/system/lib'
+elif platform.machine == 'arm':
+  os.environ['LD_LIBRARY_PATH'] = '/system/lib'
 
 def list_content(payload_file_name):
     with open(payload_file_name, 'rb') as payload_file:

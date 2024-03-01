@@ -45,6 +45,7 @@ except ImportError:
   except ImportError:
     pass
 import os
+import platform
 import subprocess
 import sys
 import tempfile
@@ -206,8 +207,8 @@ class PayloadApplier(object):
   applying an update payload.
   """
 
-  def __init__(self, payload, ignore_block_size, bsdiff_in_place=True, bspatch_path="./bspatch",
-               puffpatch_path="./puffin", truncate_to_expected_size=True):
+  def __init__(self, payload, ignore_block_size, arch='x86_64', bspatch_path='bspatch', puffpatch_path='puffin',
+               bsdiff_in_place=True, truncate_to_expected_size=True):
     """Initialize the applier.
 
     Args:
@@ -224,9 +225,15 @@ class PayloadApplier(object):
     self.ignore_block_size = ignore_block_size
     self.block_size = payload.manifest.block_size
     self.minor_version = payload.manifest.minor_version
+    self.arch = platform.machine()
+    if self.arch == 'x86_64' or self.arch == 'x86':
+      self.bspatch_path = "./bspatch" or bspatch_path
+      self.puffpatch_path = "./puffin" or puffpatch_path
+    else:
+      self.bspatch_path = "/system/bin/bspatch" or bspatch_path
+      self.puffpatch_path = "/system/bin/puffin" or puffpatch_path
+
     self.bsdiff_in_place = bsdiff_in_place
-    self.bspatch_path = bspatch_path or 'bspatch'
-    self.puffpatch_path = puffpatch_path or 'puffin'
     self.truncate_to_expected_size = truncate_to_expected_size
 
   def _ApplyReplaceOperation(self, op, op_name, out_data, part_file, part_size):
