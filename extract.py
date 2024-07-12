@@ -6,6 +6,9 @@ import os
 import platform
 import warnings
 
+from pathlib import Path
+from zipfile import ZipFile
+
 import update_payload
 from update_payload import applier, error
 
@@ -39,50 +42,66 @@ def determine_input_file_path(path):
     raise FileNotFoundError
 
 
-def extract(payload_file_name, output_dir="output", old_dir="old", partition_names=None, ignore_block_size=None):
+def extract(payload_file, output_dir="output", old_dir="old", partition_names=None, ignore_block_size=None):
     try:
         os.makedirs(output_dir)
     except OSError as e:
         if e.errno != errno.EEXIST:
             raise
-    
-    with open(payload_file_name, 'rb') as payload_file:
-        payload = update_payload.Payload(payload_file)
-        payload.Init()
 
-        is_warning_issued = False
+    payload = update_payload.Payload(payload_file)
+    payload.Init()
 
-        helper = applier.PayloadApplier(payload, ignore_block_size)
-        for part in payload.manifest.partitions:
-            if partition_names and part.partition_name not in partition_names:
-                continue
-            print("Extracting {}".format(part.partition_name), end="")
-            output_file = os.path.join(output_dir, "{}.img".format(part.partition_name))
-            try:
-                if payload.IsDelta():
-                    old_file    = determine_input_file_path(os.path.join(old_dir,    part.partition_name))
-                    helper._ApplyToPartition(
-                        part.operations, part.partition_name,
-                        'install_operations', output_file,
-                        part.new_partition_info, old_file,
-                        part.old_partition_info, part.hash_tree_data_extent if part.HasField("hash_tree_data_extent") else None,
-                        part.hash_tree_extent if part.HasField("hash_tree_extent") else None, part.hash_tree_algorithm,
-                        part.hash_tree_salt)
-                else:
-                    helper._ApplyToPartition(
-                        part.operations, part.partition_name,
-                        'install_operations', output_file,
-                        part.new_partition_info)
-            except error.PayloadError as e:
-                is_warning_issued = True
-                warnings.warn(e)
+    is_warning_issued = False
+
+    helper = applier.PayloadApplier(payload, ignore_block_size)
+    for part in payload.manifest.partitions:
+        if partition_names and part.partition_name not in partition_names:
+            continue
+        print("Extracting {}".format(part.partition_name), end="")
+        output_file = os.path.join(output_dir, "{}.img".format(part.partition_name))
+        try:
+            if payload.IsDelta():
+                old_file    = determine_input_file_path(os.path.join(old_dir,    part.partition_name))
+                helper._ApplyToPartition(
+                    part.operations, part.partition_name,
+                    'install_operations', output_file,
+                    part.new_partition_info, old_file,
+                    part.old_partition_info, part.hash_tree_data_extent if part.HasField("hash_tree_data_extent") else None,
+                    part.hash_tree_extent if part.HasField("hash_tree_extent") else None, part.hash_tree_algorithm,
+                    part.hash_tree_salt)
+            else:
+                helper._ApplyToPartition(
+                    part.operations, part.partition_name,
+                    'install_operations', output_file,
+                    part.new_partition_info)
+        except error.PayloadError as e:
+            is_warning_issued = True
+            warnings.warn(e)
 
     return not is_warning_issued
 
+def open_ota_file_and_extract(ota_file: ZipFile, *args, **kwargs):
+    with ota_file.open("payload.bin", "r") as payload_file:
+        return extract(payload_file, *args, **kwargs)
+
+def open_package_and_extract(package_path, *args, **kwargs):
+    file_extension = Path(package_path).suffix
+    
+    if file_extension == ".zip":
+        with ZipFile(package_path, "r") as ota_file:
+            return open_ota_file_and_extract(ota_file, *args, **kwargs)
+
+    elif file_extension == ".bin":
+        with open(package_path, "rb") as payload_file:
+            return extract(payload_file, *args, **kwargs)
+    else:
+        raise NotImplementedError("Unsupported file extension")
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("payload", metavar="payload.bin",
-                        help="Path to the payload.bin")
+    parser.add_argument("payload", metavar="payload.bin/update.zip",
+                        help="Path to the payload.bin or OTA zip")
     parser.add_argument("--output_dir", default="output",
                         help="Output directory")
     parser.add_argument("--old_dir", default="old",
@@ -98,5 +117,5 @@ if __name__ == '__main__':
     if args.list_partitions:
         list_content(args.payload)
     else:
-        if not extract(args.payload, args.output_dir, args.old_dir, args.partitions, args.ignore_block_size):
+        if not open_package_and_extract(args.payload, args.output_dir, args.old_dir, args.partitions, args.ignore_block_size):
             exit(1)
