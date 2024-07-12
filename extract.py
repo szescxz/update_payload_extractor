@@ -7,6 +7,8 @@ import os
 import platform
 import warnings
 
+from queue import Queue
+from threading import Thread
 from zipfile import ZipFile
 
 import update_payload
@@ -25,7 +27,7 @@ elif platform.machine == 'arm':
 
 
 class HttpFile(io.RawIOBase):
-    def __init__(self, url, additional_headers={}):
+    def __init__(self, url, additional_headers={}, num_threads=4):
         self.url = url
         self.additional_headers = additional_headers
         self.session = requests.Session()
@@ -38,6 +40,14 @@ class HttpFile(io.RawIOBase):
         self.size = int(resp.headers.get("Content-Length", "0"))
         self.pos = 0
         self.is_closed = False
+
+        self.download_queue = Queue()
+        self.merge_queue = Queue()
+        self.workers = []
+        for _ in range(num_threads):
+            worker = Thread(target=self._multithread_downloader, daemon=True)
+            worker.start()
+            self.workers.append(worker)
     
     def request(self, method, headers={}):
         headers.update(self.additional_headers)
@@ -86,26 +96,45 @@ class HttpFile(io.RawIOBase):
         self.readinto(buffer)
         return buffer
 
+    def _multithread_downloader(self):
+        while not self.is_closed:
+            offset, length = self.download_queue.get()
+            start_pos = self.pos + offset
+            end_pos = start_pos + length - 1
+
+            resp = self.request("GET", headers={
+                "Range": f"bytes={start_pos}-{end_pos}"
+            })
+            resp.raise_for_status()
+            assert resp.status_code == 206
+
+            data = b""
+            for chunk in resp.iter_content(None):
+                data += chunk
+            self.merge_queue.put((offset, data))
+            self.download_queue.task_done()
+
     def readinto(self, buffer):
         buffer_size = len(buffer)
-        end_pos = self.pos + buffer_size - 1
         if self.pos >= self.size:
             raise ValueError("EOF")
 
-        resp = self.request("GET", headers={
-            "Range": f"bytes={self.pos}-{end_pos}"
-        })
-        resp.raise_for_status()
-        assert resp.status_code == 206
-
-        read_offset = 0
-        for chunk in resp.iter_content(None):
-            chunk_size = len(chunk)
-            buffer[read_offset:read_offset+chunk_size] = chunk
-            read_offset += chunk_size
+        worker_chunk_size = int(max(1024*1024, buffer_size / len(self.workers)))
+        worker_offset = 0
+        while worker_offset < buffer_size:
+            assigned_chunk_size = min(worker_chunk_size, buffer_size - worker_offset)
+            self.download_queue.put((worker_offset, assigned_chunk_size))
+            worker_offset += assigned_chunk_size
+        
+        bytes_read = 0
+        while bytes_read < buffer_size:
+            offset, data = self.merge_queue.get()
+            data_length = len(data)
+            buffer[offset:offset+data_length] = data
+            bytes_read += data_length
+            self.merge_queue.task_done()
 
         self.pos += buffer_size
-
         return buffer_size
 
 def list_content(payload_file_name):
