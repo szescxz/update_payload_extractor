@@ -4,9 +4,10 @@ import argparse
 import errno
 import os
 import platform
+import warnings
 
 import update_payload
-from update_payload import applier
+from update_payload import applier, error
 
 if platform.machine == 'x86_64':
   os.environ['LD_LIBRARY_PATH'] = './lib64/'
@@ -49,24 +50,32 @@ def extract(payload_file_name, output_dir="output", old_dir="old", partition_nam
         payload = update_payload.Payload(payload_file)
         payload.Init()
 
+        is_warning_issued = False
+
         helper = applier.PayloadApplier(payload, ignore_block_size)
         for part in payload.manifest.partitions:
             if partition_names and part.partition_name not in partition_names:
                 continue
             print("Extracting {}".format(part.partition_name))
             output_file = os.path.join(output_dir, "{}.img".format(part.partition_name))
-            if payload.IsDelta():
-                old_file    = determine_input_file_path(os.path.join(old_dir,    part.partition_name))
-                helper._ApplyToPartition(
-                    part.operations, part.partition_name,
-                    'install_operations', output_file,
-                    part.new_partition_info, old_file,
-                    part.old_partition_info)
-            else:
-                helper._ApplyToPartition(
-                    part.operations, part.partition_name,
-                    'install_operations', output_file,
-                    part.new_partition_info)
+            try:
+                if payload.IsDelta():
+                    old_file    = determine_input_file_path(os.path.join(old_dir,    part.partition_name))
+                    helper._ApplyToPartition(
+                        part.operations, part.partition_name,
+                        'install_operations', output_file,
+                        part.new_partition_info, old_file,
+                        part.old_partition_info)
+                else:
+                    helper._ApplyToPartition(
+                        part.operations, part.partition_name,
+                        'install_operations', output_file,
+                        part.new_partition_info)
+            except error.PayloadError as e:
+                is_warning_issued = True
+                warnings.warn(e)
+
+    return not is_warning_issued
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -87,4 +96,5 @@ if __name__ == '__main__':
     if args.list_partitions:
         list_content(args.payload)
     else:
-        extract(args.payload, args.output_dir, args.old_dir, args.partitions, args.ignore_block_size)
+        if not extract(args.payload, args.output_dir, args.old_dir, args.partitions, args.ignore_block_size):
+            exit(1)
