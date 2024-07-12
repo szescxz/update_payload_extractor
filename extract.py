@@ -7,7 +7,6 @@ import os
 import platform
 import warnings
 
-from pathlib import Path
 from zipfile import ZipFile
 
 import update_payload
@@ -175,22 +174,20 @@ def open_ota_file_and_extract(ota_file: ZipFile, *args, **kwargs):
 
 def open_package_and_extract(package_path, *args, **kwargs):
     if package_path.startswith("http://") or package_path.startswith("https://"):
-        # assume it's an OTA package
-        with HttpFile(package_path) as http_file:
-            with ZipFile(http_file, "r") as ota_file:
-                return open_ota_file_and_extract(ota_file, *args, **kwargs)
+        f = HttpFile(package_path)
     else:
-        file_extension = Path(package_path).suffix
-        
-        if file_extension == ".zip":
-            with ZipFile(package_path, "r") as ota_file:
+        f = open(package_path, "rb")
+    
+    with f:
+        magic = f.read(4)
+        f.seek(0)
+        if magic == b"PK\x03\x04":
+            with ZipFile(f, "r") as ota_file:
                 return open_ota_file_and_extract(ota_file, *args, **kwargs)
-
-        elif file_extension == ".bin":
-            with open(package_path, "rb") as payload_file:
-                return extract(payload_file, *args, **kwargs)
+        elif magic == b"CrAU":
+            extract(f, *args, **kwargs)
         else:
-            raise NotImplementedError("Unsupported file extension")
+            raise ValueError("Unsupported file")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
