@@ -65,7 +65,9 @@ def extract(payload_file_name, output_dir="output", old_dir="old", partition_nam
                         part.operations, part.partition_name,
                         'install_operations', output_file,
                         part.new_partition_info, old_file,
-                        part.old_partition_info)
+                        part.old_partition_info, part.hash_tree_data_extent if part.HasField("hash_tree_data_extent") else None,
+                        part.hash_tree_extent if part.HasField("hash_tree_extent") else None, part.hash_tree_algorithm,
+                        part.hash_tree_salt)
                 else:
                     helper._ApplyToPartition(
                         part.operations, part.partition_name,

@@ -50,6 +50,7 @@ import subprocess
 import sys
 import tempfile
 
+from update_payload import avbtool
 from update_payload import common
 from update_payload.error import PayloadError
 
@@ -540,9 +541,37 @@ class PayloadApplier(object):
         raise PayloadError('%s: unknown operation type (%d)' %
                            (op_name, op.type))
 
+  def _WriteVerityHashTree(self, part_file, data_extent, hashtree_extent, hash_algorithm, salt):
+    block_size = self.block_size
+
+    assert data_extent.start_block == 0
+    image_size = data_extent.num_blocks * block_size
+
+    digest_size = len(avbtool.create_avb_hashtree_hasher(hash_algorithm, b'')
+                    .digest())
+    digest_padding = avbtool.round_to_pow2(digest_size) - digest_size
+    (hash_level_offsets, tree_size) = avbtool.calc_hash_level_offsets(
+      image_size, block_size, digest_size + digest_padding)
+
+    _, hash_tree = avbtool.generate_hash_tree(
+      part_file,
+      image_size,
+      block_size,
+      hash_algorithm if hash_algorithm else "sha256",
+      salt,
+      digest_padding,
+      hash_level_offsets,
+      tree_size
+    )
+
+    part_file.seek(hashtree_extent.start_block * block_size)
+    part_file.write(hash_tree)
+
   def _ApplyToPartition(self, operations, part_name, base_name,
                         new_part_file_name, new_part_info,
-                        old_part_file_name=None, old_part_info=None):
+                        old_part_file_name=None, old_part_info=None,
+                        hash_tree_data_extent=None, hash_tree_extent=None,
+                        hash_tree_algorithm=None, hash_tree_salt=None):
     """Applies an update to a partition.
 
     Args:
@@ -580,6 +609,13 @@ class PayloadApplier(object):
       finally:
         if old_part_file:
           old_part_file.close()
+
+      if hash_tree_extent:
+        if hash_tree_data_extent is None:
+          raise PayloadError("Partition has a verity hash tree (output) extent, but no hash tree data (input) extent")
+        if hash_tree_salt is None:
+          raise PayloadError("Partition has a verity hash tree, but is missing a salt for the hash")
+        self._WriteVerityHashTree(new_part_file, hash_tree_data_extent, hash_tree_extent, hash_tree_algorithm, hash_tree_salt)
 
       # Truncate the result, if so instructed.
       if self.truncate_to_expected_size:
