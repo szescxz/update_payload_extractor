@@ -56,7 +56,7 @@ def extract(payload_file_name, output_dir="output", old_dir="old", partition_nam
         for part in payload.manifest.partitions:
             if partition_names and part.partition_name not in partition_names:
                 continue
-            print("Extracting {}".format(part.partition_name))
+            print("Extracting {}".format(part.partition_name), end="")
             output_file = os.path.join(output_dir, "{}.img".format(part.partition_name))
             try:
                 if payload.IsDelta():

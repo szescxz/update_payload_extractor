@@ -502,7 +502,7 @@ class PayloadApplier(object):
     # Delete patch file.
     os.remove(patch_file_name)
 
-  def _ApplyOperations(self, operations, base_name, old_part_file,
+  def _ApplyOperations(self, part_name, operations, base_name, old_part_file,
                        new_part_file, part_size):
     """Applies a sequence of update operations to a partition.
 
@@ -516,6 +516,8 @@ class PayloadApplier(object):
     Raises:
       PayloadError if anything goes wrong while processing the payload.
     """
+    print("\rExtracting %s (%.2f%%)" % (part_name, 0), end="")
+
     for op, op_name in common.OperationIter(operations, base_name):
       # Read data blob.
       data = self.payload.ReadDataBlob(op.data_offset, op.data_length)
@@ -540,6 +542,8 @@ class PayloadApplier(object):
       else:
         raise PayloadError('%s: unknown operation type (%d)' %
                            (op_name, op.type))
+
+      print("\rExtracting %s (%.2f%%)" % (part_name, new_part_file.tell() / part_size * 100.0), end="")
 
   def _WriteVerityHashTree(self, part_file, data_extent, hashtree_extent, hash_algorithm, salt):
     block_size = self.block_size
@@ -604,7 +608,7 @@ class PayloadApplier(object):
       old_part_file = (open(old_part_file_name, 'r+b')
                        if old_part_file_name else None)
       try:
-        self._ApplyOperations(operations, base_name, old_part_file,
+        self._ApplyOperations(part_name, operations, base_name, old_part_file,
                               new_part_file, new_part_info.size)
       finally:
         if old_part_file:
@@ -628,6 +632,8 @@ class PayloadApplier(object):
     with open(new_part_file_name, 'rb') as new_part_file:
       _VerifySha256(new_part_file, new_part_info.hash,
                     'new ' + part_name, length=new_part_info.size)
+
+    print("\rExtracting %s (%.2f%%)" % (part_name, 100))
 
   def Run(self, new_parts, old_parts=None):
     """Applier entry point, invoking all update operations.
