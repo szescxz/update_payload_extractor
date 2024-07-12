@@ -164,7 +164,7 @@ def extract(payload_file, output_dir="output", old_dir="old", partition_names=No
                     part.new_partition_info)
         except error.PayloadError as e:
             is_warning_issued = True
-            warnings.warn(e)
+            warnings.warn(str(e))
 
     return not is_warning_issued
 
