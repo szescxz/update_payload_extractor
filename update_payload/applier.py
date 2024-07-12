@@ -341,6 +341,11 @@ class PayloadApplier(object):
 
     # Gather input raw data from src extents.
     in_data = _ReadExtents(old_part_file, op.src_extents, block_size)
+    if len(op.src_sha256_hash) != 0:
+      actual_hash = hashlib.sha256(in_data).digest()
+      expected_hash = op.src_sha256_hash
+      if actual_hash != expected_hash:
+          raise PayloadError('%s: source data hash (%s) not as expected (%s)' % (op_name, common.FormatSha256(actual_hash), common.FormatSha256(expected_hash)))
 
     # Dump extracted data to dst extents.
     _WriteExtents(new_part_file, in_data, op.dst_extents, block_size,
@@ -383,6 +388,13 @@ class PayloadApplier(object):
           (op_name, op.type))
 
     block_size = self.block_size
+
+    in_data = _ReadExtents(old_part_file, op.src_extents, block_size)
+    if len(op.src_sha256_hash) != 0:
+      actual_hash = hashlib.sha256(in_data).digest()
+      expected_hash = op.src_sha256_hash
+      if actual_hash != expected_hash:
+          raise PayloadError('%s: source data hash (%s) not as expected (%s)' % (op_name, common.FormatSha256(actual_hash), common.FormatSha256(expected_hash)))
 
     # Dump patch data to file.
     with tempfile.NamedTemporaryFile(delete=False) as patch_file:
@@ -506,6 +518,11 @@ class PayloadApplier(object):
     for op, op_name in common.OperationIter(operations, base_name):
       # Read data blob.
       data = self.payload.ReadDataBlob(op.data_offset, op.data_length)
+      if len(op.data_sha256_hash) != 0:
+        expected_hash = op.data_sha256_hash
+        actual_hash = hashlib.sha256(data).digest()
+        if actual_hash != expected_hash:
+          raise PayloadError('%s: data blob hash (%s) not as expected (%s)' % (op_name, common.FormatSha256(actual_hash), common.FormatSha256(expected_hash)))
 
       if op.type in (common.OpType.REPLACE, common.OpType.REPLACE_BZ,
                      common.OpType.REPLACE_XZ):
@@ -525,8 +542,7 @@ class PayloadApplier(object):
 
   def _ApplyToPartition(self, operations, part_name, base_name,
                         new_part_file_name, new_part_info,
-                        old_part_file_name=None, old_part_info=None,
-                        skip_hash=None):
+                        old_part_file_name=None, old_part_info=None):
     """Applies an update to a partition.
 
     Args:
@@ -537,18 +553,16 @@ class PayloadApplier(object):
       new_part_info: size and expected hash of dest partition
       old_part_file_name: file name of source partition (optional)
       old_part_info: size and expected hash of source partition (optional)
-      skip_hash: command line arg to skip hash checks
 
     Raises:
       PayloadError if anything goes wrong with the update.
     """
     # Do we have a source partition?
     if old_part_file_name:
-      # Verify the source partition if skip_hash arg was not given.
-      if not skip_hash:
-        with open(old_part_file_name, 'rb') as old_part_file:
-          _VerifySha256(old_part_file, old_part_info.hash,
-                        'old ' + part_name, length=old_part_info.size)
+      # Verify the source partition.
+      with open(old_part_file_name, 'rb') as old_part_file:
+        _VerifySha256(old_part_file, old_part_info.hash,
+                      'old ' + part_name, length=old_part_info.size)
       new_part_file_mode = 'r+b'
       open(new_part_file_name, 'w').close()
 
@@ -574,11 +588,10 @@ class PayloadApplier(object):
           new_part_file.seek(new_part_info.size)
           new_part_file.truncate()
 
-    # Verify the resulting partition if skip_hash arg was not given.
-    if not skip_hash:
-      with open(new_part_file_name, 'rb') as new_part_file:
-        _VerifySha256(new_part_file, new_part_info.hash,
-                      'new ' + part_name, length=new_part_info.size)
+    # Verify the resulting partition.
+    with open(new_part_file_name, 'rb') as new_part_file:
+      _VerifySha256(new_part_file, new_part_info.hash,
+                    'new ' + part_name, length=new_part_info.size)
 
   def Run(self, new_parts, old_parts=None):
     """Applier entry point, invoking all update operations.

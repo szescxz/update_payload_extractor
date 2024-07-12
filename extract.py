@@ -38,7 +38,7 @@ def determine_input_file_path(path):
     raise FileNotFoundError
 
 
-def extract(payload_file_name, output_dir="output", old_dir="old", partition_names=None, skip_hash=None, ignore_block_size=None):
+def extract(payload_file_name, output_dir="output", old_dir="old", partition_names=None, ignore_block_size=None):
     try:
         os.makedirs(output_dir)
     except OSError as e:
@@ -61,13 +61,12 @@ def extract(payload_file_name, output_dir="output", old_dir="old", partition_nam
                     part.operations, part.partition_name,
                     'install_operations', output_file,
                     part.new_partition_info, old_file,
-                    part.old_partition_info, skip_hash)
+                    part.old_partition_info)
             else:
                 helper._ApplyToPartition(
                     part.operations, part.partition_name,
                     'install_operations', output_file,
-                    part.new_partition_info,
-                    skip_hash=skip_hash)
+                    part.new_partition_info)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -81,8 +80,6 @@ if __name__ == '__main__':
                         help="Name of the partitions to extract")
     parser.add_argument("--list_partitions", action="store_true",
                         help="List the partitions included in the payload.bin")
-    parser.add_argument("--skip_hash", action="store_true",
-                        help="Skip the hash check for individual img files")
     parser.add_argument("--ignore_block_size", action="store_true",
                         help="Ignore block size")
 
@@ -90,4 +87,4 @@ if __name__ == '__main__':
     if args.list_partitions:
         list_content(args.payload)
     else:
-        extract(args.payload, args.output_dir, args.old_dir, args.partitions, args.skip_hash, args.ignore_block_size)
+        extract(args.payload, args.output_dir, args.old_dir, args.partitions, args.ignore_block_size)
