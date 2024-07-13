@@ -98,19 +98,30 @@ class HttpFile(io.RawIOBase):
     def _multithread_downloader(self):
         while not self.close_event.is_set():
             offset, length = self.download_queue.get()
-            start_pos = self.pos + offset
-            end_pos = start_pos + length - 1
+            while not self.close_event.is_set() and length > 0:
+                data = b""
+                try:
+                    start_pos = self.pos + offset
+                    end_pos = start_pos + length - 1
 
-            resp = self.request("GET", headers={
-                "Range": f"bytes={start_pos}-{end_pos}"
-            })
-            resp.raise_for_status()
-            assert resp.status_code == 206
+                    resp = self.request("GET", headers={
+                        "Range": f"bytes={start_pos}-{end_pos}"
+                    })
+                    resp.raise_for_status()
+                    assert resp.status_code == 206
 
-            data = b""
-            for chunk in resp.iter_content(None):
-                data += chunk
-            self.merge_queue.put((offset, data))
+                    for chunk in resp.iter_content(None):
+                        data += chunk
+                        if self.close_event.is_set():
+                            return
+                except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError) as e:
+                    warnings.warn(str(e))
+                
+                received_length = len(data)
+                if received_length > 0:
+                    self.merge_queue.put((offset, data))
+                    offset += received_length
+                    length -= received_length
             self.download_queue.task_done()
 
     def readinto(self, buffer):
