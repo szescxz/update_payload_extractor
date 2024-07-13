@@ -228,8 +228,8 @@ class PayloadApplier(object):
     self.minor_version = payload.manifest.minor_version
     self.arch = platform.machine()
     if self.arch == 'x86_64' or self.arch == 'x86':
-      self.bspatch_path = "./bspatch" or bspatch_path
-      self.puffpatch_path = "./puffin" or puffpatch_path
+      self.bspatch_path = os.path.join(os.path.dirname(__file__), "..", "bspatch") or bspatch_path
+      self.puffpatch_path = os.path.join(os.path.dirname(__file__), "..", "puffin") or puffpatch_path
     else:
       self.bspatch_path = "/system/bin/bspatch" or bspatch_path
       self.puffpatch_path = "/system/bin/puffin" or puffpatch_path
