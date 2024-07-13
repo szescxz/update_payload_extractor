@@ -5,10 +5,10 @@ import errno
 import io
 import os
 import platform
+import threading
 import warnings
 
 from queue import Queue
-from threading import Thread
 from zipfile import ZipFile
 
 from update_payload import applier, error, Payload
@@ -38,13 +38,13 @@ class HttpFile(io.RawIOBase):
 
         self.size = int(resp.headers.get("Content-Length", "0"))
         self.pos = 0
-        self.is_closed = False
+        self.close_event = threading.Event()
 
         self.download_queue = Queue()
         self.merge_queue = Queue()
         self.workers = []
         for _ in range(num_threads):
-            worker = Thread(target=self._multithread_downloader, daemon=True)
+            worker = threading.Thread(target=self._multithread_downloader, daemon=True)
             worker.start()
             self.workers.append(worker)
     
@@ -54,10 +54,10 @@ class HttpFile(io.RawIOBase):
 
     def close(self):
         self.session.close()
-        self.is_closed = True
+        self.close_event.set()
 
     def closed(self):
-        return self.is_closed
+        return self.close_event.is_set()
 
     def __enter__(self):
         return self
@@ -96,7 +96,7 @@ class HttpFile(io.RawIOBase):
         return buffer
 
     def _multithread_downloader(self):
-        while not self.is_closed:
+        while not self.close_event.is_set():
             offset, length = self.download_queue.get()
             start_pos = self.pos + offset
             end_pos = start_pos + length - 1
