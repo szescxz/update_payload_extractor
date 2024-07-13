@@ -11,8 +11,7 @@ from queue import Queue
 from threading import Thread
 from zipfile import ZipFile
 
-import update_payload
-from update_payload import applier, error
+from update_payload import applier, error, Payload
 
 import requests
 
@@ -139,7 +138,7 @@ class HttpFile(io.RawIOBase):
 
 def list_content(payload_file_name):
     with open(payload_file_name, 'rb') as payload_file:
-        payload = update_payload.Payload(payload_file)
+        payload = Payload(payload_file)
         payload.Init()
 
         for part in payload.manifest.partitions:
@@ -165,7 +164,7 @@ def extract(payload_file, output_dir="output", old_dir="old", partition_names=No
         if e.errno != errno.EEXIST:
             raise
 
-    payload = update_payload.Payload(payload_file)
+    payload = Payload(payload_file)
     payload.Init()
 
     is_warning_issued = False
@@ -174,8 +173,17 @@ def extract(payload_file, output_dir="output", old_dir="old", partition_names=No
     for part in payload.manifest.partitions:
         if partition_names and part.partition_name not in partition_names:
             continue
-        print("Extracting {}".format(part.partition_name), end="")
         output_file = os.path.join(output_dir, "{}.img".format(part.partition_name))
+        if os.path.exists(output_file) and os.path.getsize(output_file) == part.new_partition_info.size:
+            print("\rVerifying {}".format(part.partition_name), end="")
+            with open(output_file, "rb") as f:
+                try:
+                    applier._VerifySha256(f, part.new_partition_info.hash, part.partition_name, part.new_partition_info.size)
+                    print("\rVerifying {} [OK]".format(part.partition_name))
+                    continue
+                except error.PayloadError:
+                    pass
+        print("\rExtracting {}".format(part.partition_name), end="")
         try:
             if payload.IsDelta():
                 old_file    = determine_input_file_path(os.path.join(old_dir,    part.partition_name))
